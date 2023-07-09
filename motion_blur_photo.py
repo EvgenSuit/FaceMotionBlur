@@ -12,28 +12,32 @@ output_photos = os.listdir(output_photos_path)
 
 photos_to_pass = [i for i in source_photos if i not in output_photos]
 
+
 def main(photos_to_pass):
-    for i in source_photos:
+    for i in photos_to_pass:
+        print(source_photos_path+i)
         img = cv2.imread(source_photos_path+i)
         output = detect_faces(img)
-    
+        try:
+            cv2.imwrite(output_photos_path+i, output, [cv2.COLOR_BGR2RGB])
+        except Exception:
+            print('No faces detected')
+
 
 def detect_faces(img):
     grey_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    faces = face_detector.detectMultiScale(grey_img, scaleFactor=1.03, minNeighbors=25, minSize=(40,40))
+    faces = face_detector.detectMultiScale(grey_img, scaleFactor=1.1, minNeighbors=10, minSize=(40,40))
     output = apply_to_region(img, faces)
+    return output
 
 def apply_to_region(img, faces):
     for (x, y, w, h) in faces:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         roi = img[y:y+h, x:x+w, :]
         blur_roit = apply_blur(roi)
         img[y:y+h, x:x+w, :] = blur_roit
-       
-        plt.imshow(img)
-        plt.axis('off')
-        plt.show()
+        return img
+        
 def apply_blur(roi):
     kernel_size = 70
     kernel_h = create_kernel(kernel_size)
