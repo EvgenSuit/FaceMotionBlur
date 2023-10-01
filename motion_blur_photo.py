@@ -1,7 +1,7 @@
 import cv2
 import os
-import matplotlib.pyplot as plt
 import numpy as np
+capture = cv2.VideoCapture(0)
 
 photos_path = 'photos/'
 source_photos_path = photos_path + 'source/'
@@ -10,39 +10,50 @@ output_photos_path = photos_path + 'output/'
 source_photos = os.listdir(source_photos_path)
 output_photos = os.listdir(output_photos_path)
 
-photos_to_pass = [i for i in source_photos if i not in output_photos]
+photos_to_pass = [i for i in source_photos]
+face_detector = cv2.dnn.readNetFromCaffe(
+    'deploy.prototxt.txt', 'res10_300x300_ssd_iter_140000.caffemodel')
 
 
-def main(photos_to_pass):
-    for i in photos_to_pass:
-        print(source_photos_path+i)
-        img = cv2.imread(source_photos_path+i)
-        output = detect_faces(img)
-        try:
-            cv2.imwrite(output_photos_path+i, output, [cv2.COLOR_BGR2RGB])
-        except Exception:
-            print('No faces detected')
+def main():
+    img = capture.read()[1]
+
+    w, h = img.shape[:2]
+    output = detect_faces(img, w, h)
+    cv2.imshow('frame', output)
 
 
-def detect_faces(img):
+def detect_faces(img, w, h):
     grey_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    faces = face_detector.detectMultiScale(grey_img, scaleFactor=1.1, minNeighbors=10, minSize=(40,40))
-    output = apply_to_region(img, faces)
+    blob = cv2.dnn.blobFromImage(cv2.resize(img, (400, 400)))
+    face_detector.setInput(blob)
+    detections = face_detector.forward()
+    output = apply_to_region(img, detections, w, h)
     return output
 
-def apply_to_region(img, faces):
-    for (x, y, w, h) in faces:
-        roi = img[y:y+h, x:x+w, :]
-        blur_roit = apply_blur(roi)
-        img[y:y+h, x:x+w, :] = blur_roit
-        return img
-        
+
+def apply_to_region(img, detections, w, h):
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > 0.99:
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            if any(box < 0):
+                break
+            x, y, w, h = box.astype('int')
+            roi = img[y:h, x:x+w, :]
+            if not roi.tolist():
+                break
+            blur_roit = apply_blur(roi)
+            img[y:h, x:x+w, :] = blur_roit
+    return img
+
+
 def apply_blur(roi):
     kernel_size = 70
     kernel_h = create_kernel(kernel_size)
     roi = cv2.filter2D(roi, -1, kernel_h)
     return roi
+
 
 def create_kernel(kernel_size):
     kernel_h = np.zeros((kernel_size, kernel_size))
@@ -50,4 +61,10 @@ def create_kernel(kernel_size):
     kernel_h /= kernel_size
     return kernel_h
 
-main(photos_to_pass)
+
+while True:
+    main()
+    if cv2.waitKey(1) == ord('q'):
+        break
+capture.release()
+cv2.destroyAllWindows()
